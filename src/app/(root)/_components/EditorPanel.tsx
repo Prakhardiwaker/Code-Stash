@@ -28,6 +28,7 @@ function EditorPanel() {
   const { language, theme, fontSize, editor, setFontSize, setEditor } =
     useCodeEditorStore();
   const [isProUser, setIsProUser] = useState(false);
+  // eslint-disable-next-line @typescript-eslint/no-unused-vars
   const [isLoadingPro, setIsLoadingPro] = useState(false);
 
   const mounted = useMounted();

@@ -22,6 +22,7 @@ import { useCodeEditorStore } from "@/store/useCodeEditorStore";
 function SnippetDetailPage() {
   const { user } = useUser();
   const [isProUser, setIsProUser] = useState(false);
+  // eslint-disable-next-line @typescript-eslint/no-unused-vars
   const [isLoadingPro, setIsLoadingPro] = useState(false);
   const [isCodeReviewDialogOpen, setIsCodeReviewDialogOpen] = useState(false);
   const { language, editor } = useCodeEditorStore();
