@@ -5,19 +5,61 @@ import { defineMonacoThemes, LANGUAGE_CONFIG } from "../_constants";
 import { Editor } from "@monaco-editor/react";
 import { motion } from "framer-motion";
 import Image from "next/image";
-import { RotateCcwIcon, ShareIcon, TypeIcon } from "lucide-react";
-import { useClerk } from "@clerk/nextjs";
+import {
+  RotateCcwIcon,
+  ShareIcon,
+  TypeIcon,
+  Sparkles,
+  Lock,
+} from "lucide-react";
+import { useClerk, useUser } from "@clerk/nextjs";
 import { EditorPanelSkeleton } from "./EditorPanelSkeleton";
 import useMounted from "@/hooks/useMounted";
 import ShareSnippetDialog from "./ShareSnippetDialog";
+import CodeReviewDialog from "./CodeReviewDialog";
+import { api } from "../../../../convex/_generated/api";
+import { ConvexHttpClient } from "convex/browser";
 
 function EditorPanel() {
   const clerk = useClerk();
+  const { user } = useUser();
   const [isShareDialogOpen, setIsShareDialogOpen] = useState(false);
+  const [isCodeReviewDialogOpen, setIsCodeReviewDialogOpen] = useState(false);
   const { language, theme, fontSize, editor, setFontSize, setEditor } =
     useCodeEditorStore();
+  const [isProUser, setIsProUser] = useState(false);
+  const [isLoadingPro, setIsLoadingPro] = useState(false);
 
   const mounted = useMounted();
+
+  useEffect(() => {
+    const fetchUser = async () => {
+      try {
+        const convex = new ConvexHttpClient(
+          process.env.NEXT_PUBLIC_CONVEX_URL!
+        );
+
+        // we already have `user` from useUser()
+        if (!user?.id) {
+          setIsProUser(false);
+          return;
+        }
+
+        const convexUser = await convex.query(api.users.getUser, {
+          userId: user.id,
+        });
+
+        setIsProUser(!!convexUser?.isPro);
+      } catch (err) {
+        console.error("Failed to fetch convex user:", err);
+        setIsProUser(false);
+      } finally {
+        setIsLoadingPro(false);
+      }
+    };
+
+    fetchUser();
+  }, [user?.id]);
 
   useEffect(() => {
     const savedCode = localStorage.getItem(`editor-code-${language}`);
@@ -29,6 +71,79 @@ function EditorPanel() {
     const savedFontSize = localStorage.getItem("editor-font-size");
     if (savedFontSize) setFontSize(parseInt(savedFontSize));
   }, [setFontSize]);
+
+  // Add custom scrollbar styles when component mounts
+  useEffect(() => {
+    const style = document.createElement("style");
+    style.textContent = `
+      /* Monaco Editor Custom Scrollbar Styles */
+      .monaco-editor .monaco-scrollable-element > .scrollbar > .slider {
+        background: rgba(255, 255, 255, 0.1) !important;
+        border-radius: 4px !important;
+      }
+      
+      .monaco-editor .monaco-scrollable-element > .scrollbar > .slider:hover {
+        background: rgba(255, 255, 255, 0.2) !important;
+      }
+      
+      .monaco-editor .monaco-scrollable-element > .scrollbar > .slider.active {
+        background: rgba(255, 255, 255, 0.3) !important;
+      }
+      
+      .monaco-editor .monaco-scrollable-element > .scrollbar {
+        background: rgba(18, 18, 26, 0.5) !important;
+      }
+      
+      .monaco-editor .monaco-scrollable-element .scrollbar.vertical {
+        background: transparent !important;
+        width: 12px !important;
+      }
+      
+      .monaco-editor .monaco-scrollable-element .scrollbar.horizontal {
+        background: transparent !important;
+        height: 12px !important;
+      }
+
+      /* Webkit scrollbar styles as fallback */
+      .monaco-editor ::-webkit-scrollbar {
+        width: 12px;
+        height: 12px;
+        background: transparent;
+      }
+      
+      .monaco-editor ::-webkit-scrollbar-track {
+        background: rgba(18, 18, 26, 0.3);
+        border-radius: 4px;
+      }
+      
+      .monaco-editor ::-webkit-scrollbar-thumb {
+        background: rgba(255, 255, 255, 0.1);
+        border-radius: 4px;
+        border: 2px solid transparent;
+        background-clip: content-box;
+      }
+      
+      .monaco-editor ::-webkit-scrollbar-thumb:hover {
+        background: rgba(255, 255, 255, 0.2);
+        background-clip: content-box;
+      }
+      
+      .monaco-editor ::-webkit-scrollbar-thumb:active {
+        background: rgba(255, 255, 255, 0.3);
+        background-clip: content-box;
+      }
+
+      .monaco-editor ::-webkit-scrollbar-corner {
+        background: rgba(18, 18, 26, 0.3);
+      }
+    `;
+
+    document.head.appendChild(style);
+
+    return () => {
+      document.head.removeChild(style);
+    };
+  }, []);
 
   const handleRefresh = () => {
     const defaultCode = LANGUAGE_CONFIG[language].defaultCode;
@@ -44,6 +159,21 @@ function EditorPanel() {
     const size = Math.min(Math.max(newSize, 12), 24);
     setFontSize(size);
     localStorage.setItem("editor-font-size", size.toString());
+  };
+
+  const handleCodeReview = () => {
+    if (!isProUser) {
+      // You might want to show an upgrade modal instead
+      alert(
+        "Code Review is a Pro feature. Please upgrade your plan to access this functionality."
+      );
+      return;
+    }
+    setIsCodeReviewDialogOpen(true);
+  };
+
+  const getCurrentCode = () => {
+    return editor?.getValue() || "";
   };
 
   if (!mounted) return null;
@@ -89,6 +219,36 @@ function EditorPanel() {
                 </span>
               </div>
             </div>
+
+            {/* Code Review Button */}
+            <motion.button
+              whileHover={{ scale: isProUser ? 1.02 : 1 }}
+              whileTap={{ scale: isProUser ? 0.98 : 1 }}
+              onClick={handleCodeReview}
+              disabled={!isProUser}
+              className={`inline-flex items-center gap-2 px-4 py-2 rounded-lg transition-all ${
+                isProUser
+                  ? "bg-gradient-to-r from-purple-500 to-pink-500 opacity-90 hover:opacity-100 text-white"
+                  : "bg-[#1e1e2e] text-gray-500 cursor-not-allowed"
+              }`}
+              title={
+                isProUser
+                  ? "Get AI code review"
+                  : "Upgrade to Pro to use Code Review"
+              }
+            >
+              {isProUser ? (
+                <Sparkles className="size-4" />
+              ) : (
+                <Lock className="size-4" />
+              )}
+              <span className="text-sm font-medium">Code Review</span>
+              {!isProUser && (
+                <span className="text-xs bg-gradient-to-r from-purple-400 to-pink-400 bg-clip-text text-transparent font-semibold">
+                  PRO
+                </span>
+              )}
+            </motion.button>
 
             <motion.button
               whileHover={{ scale: 1.1 }}
@@ -141,8 +301,13 @@ function EditorPanel() {
                 letterSpacing: 0.5,
                 roundedSelection: true,
                 scrollbar: {
-                  verticalScrollbarSize: 8,
-                  horizontalScrollbarSize: 8,
+                  verticalScrollbarSize: 12,
+                  horizontalScrollbarSize: 12,
+                  useShadows: false,
+                  vertical: "visible",
+                  horizontal: "visible",
+                  verticalSliderSize: 12,
+                  horizontalSliderSize: 12,
                 },
               }}
             />
@@ -151,9 +316,18 @@ function EditorPanel() {
           {!clerk.loaded && <EditorPanelSkeleton />}
         </div>
       </div>
+
+      {/* Dialogs */}
       {isShareDialogOpen && (
         <ShareSnippetDialog onClose={() => setIsShareDialogOpen(false)} />
       )}
+
+      <CodeReviewDialog
+        isOpen={isCodeReviewDialogOpen}
+        onClose={() => setIsCodeReviewDialogOpen(false)}
+        code={getCurrentCode()}
+        language={language}
+      />
     </div>
   );
 }

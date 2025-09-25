@@ -6,14 +6,68 @@ import { api } from "../../../../convex/_generated/api";
 import { Id } from "../../../../convex/_generated/dataModel";
 import SnippetLoadingSkeleton from "./_components/SnippetLoadingSkeleton";
 import NavigationHeader from "@/components/NavigationHeader";
-import { Clock, Code, MessageSquare, User } from "lucide-react";
+import { Clock, Code, MessageSquare, Sparkles, User, Lock } from "lucide-react";
 import { Editor } from "@monaco-editor/react";
 import { defineMonacoThemes, LANGUAGE_CONFIG } from "@/app/(root)/_constants";
 import CopyButton from "./_components/CopyButton";
 import Comments from "./_components/Comments";
 import Image from "next/image";
+import { motion } from "framer-motion";
+import { useEffect, useState } from "react";
+import { ConvexHttpClient } from "convex/browser";
+import { useUser } from "@clerk/nextjs";
+import CodeReviewDialog from "@/app/(root)/_components/CodeReviewDialog";
+import { useCodeEditorStore } from "@/store/useCodeEditorStore";
 
 function SnippetDetailPage() {
+  const { user } = useUser();
+  const [isProUser, setIsProUser] = useState(false);
+  const [isLoadingPro, setIsLoadingPro] = useState(false);
+  const [isCodeReviewDialogOpen, setIsCodeReviewDialogOpen] = useState(false);
+  const { language, editor } = useCodeEditorStore();
+
+  const getCurrentCode = () => {
+    return editor?.getValue() || "";
+  };
+
+  useEffect(() => {
+    const fetchUser = async () => {
+      try {
+        const convex = new ConvexHttpClient(
+          process.env.NEXT_PUBLIC_CONVEX_URL!
+        );
+
+        if (!user?.id) {
+          setIsProUser(false);
+          return;
+        }
+
+        const convexUser = await convex.query(api.users.getUser, {
+          userId: user.id,
+        });
+
+        setIsProUser(!!convexUser?.isPro);
+      } catch (err) {
+        console.error("Failed to fetch convex user:", err);
+        setIsProUser(false);
+      } finally {
+        setIsLoadingPro(false);
+      }
+    };
+
+    fetchUser();
+  }, [user?.id]);
+
+  const handleCodeReview = () => {
+    if (!isProUser) {
+      alert(
+        "Code Review is a Pro feature. Please upgrade your plan to access this functionality."
+      );
+      return;
+    }
+    setIsCodeReviewDialogOpen(true);
+  };
+
   const snippetId = useParams().id;
 
   const snippet = useQuery(api.snippets.getSnippetById, {
@@ -39,7 +93,9 @@ function SnippetDetailPage() {
                   <Image
                     src={`/${snippet.language}.png`}
                     alt={`${snippet.language} logo`}
-                    className="w-full h-full object-contain"
+                    width={24}
+                    height={24}
+                    className="object-contain"
                   />
                 </div>
                 <div>
@@ -77,8 +133,42 @@ function SnippetDetailPage() {
                 <Code className="w-4 h-4" />
                 <span className="text-sm font-medium">Source Code</span>
               </div>
-              <CopyButton code={snippet.code} />
+
+              {/* Buttons aligned together */}
+              <div className="flex items-center gap-3">
+                <motion.button
+                  whileHover={{ scale: isProUser ? 1.02 : 1 }}
+                  whileTap={{ scale: isProUser ? 0.98 : 1 }}
+                  onClick={handleCodeReview}
+                  disabled={!isProUser}
+                  className={`inline-flex items-center gap-2 px-4 py-2 rounded-lg transition-all ${
+                    isProUser
+                      ? "bg-gradient-to-r from-purple-500 to-pink-500 opacity-90 hover:opacity-100 text-white"
+                      : "bg-[#1e1e2e] text-gray-500 cursor-not-allowed"
+                  }`}
+                  title={
+                    isProUser
+                      ? "Get AI code review"
+                      : "Upgrade to Pro to use Code Review"
+                  }
+                >
+                  {isProUser ? (
+                    <Sparkles className="size-4" />
+                  ) : (
+                    <Lock className="size-4" />
+                  )}
+                  <span className="text-sm font-medium">Code Review</span>
+                  {!isProUser && (
+                    <span className="text-xs bg-gradient-to-r from-purple-400 to-pink-400 bg-clip-text text-transparent font-semibold">
+                      PRO
+                    </span>
+                  )}
+                </motion.button>
+
+                <CopyButton code={snippet.code} />
+              </div>
             </div>
+
             <Editor
               height="600px"
               language={LANGUAGE_CONFIG[snippet.language].monacoLanguage}
@@ -102,6 +192,12 @@ function SnippetDetailPage() {
           <Comments snippetId={snippet._id} />
         </div>
       </main>
+      <CodeReviewDialog
+        isOpen={isCodeReviewDialogOpen}
+        onClose={() => setIsCodeReviewDialogOpen(false)}
+        code={getCurrentCode() || snippet.code} // fallback to stored snippet code
+        language={language || snippet.language} // fallback to stored snippet language
+      />
     </div>
   );
 }
