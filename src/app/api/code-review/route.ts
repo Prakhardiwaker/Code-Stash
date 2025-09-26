@@ -76,9 +76,43 @@ Respond ONLY with the JSON object.
       );
     }
 
+    console.log("=== GEMINI API DEBUG ===");
+    console.log("API Key exists:", !!apiKey);
+    console.log("API Key prefix:", apiKey?.substring(0, 10) + "...");
+
+    const modelUrl = `https://generativelanguage.googleapis.com/v1beta/models/gemini-1.5-flash:generateContent?key=${apiKey}`;
+    console.log(
+      "Full URL being called:",
+      modelUrl.replace(apiKey, "***API_KEY***")
+    );
+
+    // Test the models list endpoint first
+    console.log("Testing models list endpoint...");
+    try {
+      const modelsResponse = await fetch(
+        `https://generativelanguage.googleapis.com/v1beta/models?key=${apiKey}`
+      );
+      console.log("Models endpoint status:", modelsResponse.status);
+
+      if (modelsResponse.ok) {
+        const modelsData = await modelsResponse.json();
+        console.log(
+          "Available models:",
+          modelsData.models?.map((m: any) => m.name) || "No models found"
+        );
+      } else {
+        const errorText = await modelsResponse.text();
+        console.log("Models endpoint error:", errorText);
+      }
+    } catch (modelsError) {
+      console.log("Models endpoint fetch error:", modelsError);
+    }
+
+    console.log("Now attempting main generateContent call...");
+
     // Call Gemini API with correct endpoint and format
     const geminiResponse = await fetch(
-      `https://generativelanguage.googleapis.com/v1beta/models/gemini-1.5-flash-latest:generateContent?key=${apiKey}`,
+      `https://generativelanguage.googleapis.com/v1beta/models/gemini-2.0-flash:generateContent?key=${apiKey}`,
       {
         method: "POST",
         headers: {
